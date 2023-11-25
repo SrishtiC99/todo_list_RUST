@@ -1,4 +1,7 @@
-use std::io;
+use std::io::{self, Read, Write};
+use std::fs::{File, OpenOptions};
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 
 struct TodoItem {
     id: u32,
@@ -15,6 +18,32 @@ impl TodoItem {
             completed: false
         };
     }
+}
+
+fn load_todo_list_from_file(filename: &str) -> io::Result<Vec<TodoItem>> {
+    
+    let mut file = File::open(filename).expect("Could not open file");
+
+    let mut contents = String::new();
+    
+    file.read_to_string(&mut contents).expect("Could not read file");
+    
+    let todo_list: Vec<TodoItem> = serde_json::from_str(&contents).expect("Error deserializing data");
+    
+    Ok(todo_list)
+}
+
+fn save_todo_list(filename: &str, todo_list: &[TodoItem]) -> io::Result<()> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(filename)?;
+
+    let json_data = serde_json::to_string_pretty(todo_list)?;
+    file.write_all(json_data.as_bytes())?;
+
+    Ok(())
 }
 
 fn mark_todo_as_completed(todo_list: &mut Vec<TodoItem>) {
@@ -68,11 +97,12 @@ fn display_todo_list(todo_list: &[TodoItem]) {
 }
 
 fn main() {
-    let mut todo_list: Vec<TodoItem> = Vec::new();
+    const TODO_FILE: &str = "todo_list.json";
 
-    todo_list.push(TodoItem::new(1, "My first Rust Project"));
-    todo_list.push(TodoItem::new(2, "Laundry"));
-    todo_list.push(TodoItem::new(3, "Evening Tea"));
+    let mut current_todo_list = match  load_todo_list_from_file(TODO_FILE){
+        Ok(todo_list) => todo_list,
+        Err(_) => Vec::new()
+    };
 
     loop {
         println!("Please choose your ACTION!\n");
@@ -86,11 +116,15 @@ fn main() {
         io::stdin().read_line(&mut input).expect("Did not receive any input, Please try again");
         
         match input.trim_end() {
-            "1" => add_todo_item(&mut todo_list),
-            "2" => mark_todo_as_completed(&mut todo_list),
-            "3" => display_todo_list(&todo_list),
+            "1" => add_todo_item(&mut current_todo_list),
+            "2" => mark_todo_as_completed(&mut current_todo_list),
+            "3" => display_todo_list(&current_todo_list),
             "4" => break,
             _ => println!("Please enter a valid action number\n")
         }
+    }
+    
+    if let Err(err) = save_todo_list(TODO_FILE, &current_todo_list) {
+        eprintln!("Error saving todo list: {}", err);
     }
 }
